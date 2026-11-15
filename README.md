@@ -4,6 +4,32 @@
 
 ## 六人共用的固定規格
 
+### PCA 介面更新（2026-11-15）
+
+PCA 改為 `model = fitPCA(Xtrain, ytrain)`，兩個參數都必填，順序與 LDA 一致。
+`ytrain` 為每筆訓練樣本對應的 categorical 標籤；PCA 只檢查型別、筆數與缺失值，
+不使用標籤計算平均、方向或 q，也不要求兩類都出現。原本的單參數呼叫已移除。
+
+模型欄位正式改名：`W` → `w`、`inputD` → `inputDim`、`nTrain` → `numSamples`。
+舊欄位與 transform 的舊欄位轉換邏輯均已移除；舊模型請用新介面重新 fit。
+PCA 的 `w` 仍是 D×q 矩陣，輸出仍是 N×q，q 的規則與 SVD 計算不變。
+`rank` 仍指 PCA 中心化資料的秩，不改名為 LDA 的 `rankR`。
+原有的 explained variance 與計時資訊保留，因為它們不是被取代的欄位別名。
+
+```matlab
+model = fitPCA(Xtrain, ytrain);
+Ztrain = transformPCA(model, Xtrain);
+Zvalid = transformPCA(model, Xvalid);
+```
+
+這次只調整 PCA 及對應測試／文件，沒有新增 `fitReducer`，也沒有修改 LDA。
+在專案根目錄執行 `results = runtests('tests/testPCA.m'); assertSuccess(results);`
+可檢查數學結果、標籤不影響 PCA，以及舊介面確實已移除。
+此更新環境沒有 MATLAB，尚未執行這些 MATLAB 測試。
+`CHANGES.diff` 是相對於最初上傳 PCA 壓縮檔的完整變更（不含 diff 檔本身）。
+
+### 原有共同規格
+
 課程要求 200 張訓練圖（男女各 100）做五折交叉驗證，並另以獨立的 100 張正式測試圖（男女各 50）做最終評估。訓練資料交付包含 200 張；正式測試圖由 A 向授課端取得並單獨封存，程式與設定鎖定後再交 F 評估。不可把 validation fold 稱為正式測試結果。
 
 流程圖可編輯原始檔和 SVG 預覽位於 assets/。

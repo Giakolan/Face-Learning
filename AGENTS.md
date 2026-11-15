@@ -29,15 +29,15 @@ MATLAB 是正式實驗環境；GitHub 分支放程式、合成測試與文件；
 
 實作每折獨立 fit 的 PCA 模型與 transform，和 C 對齊降維輸出，讓 D/E 能直接接分類器。
 
-PCA 是以最大資料變異方向建立正交基底。fit 僅用 train rows。mu 是 1×D、W 是 D×q、Z 是 N×q。validation 套用相同的 mu/W。q 不做外層性能調參，而是取 MATLAB rank 的數值秩，容差使用 MATLAB 官方預設。
+PCA 是以最大資料變異方向建立正交基底。fit 僅用 train rows。mu 是 1×D、w 是 D×q、Z 是 N×q。validation 套用相同的 mu/w。q 不做外層性能調參，而是取 MATLAB rank 的數值秩，容差使用 MATLAB 官方預設。
 
 ## 手把手操作步驟
 
 1. 先用 synthetic 6×4 矩陣測試 orientation、fit/transform shape 和中心化。
 2. 載入 A 的 train_dataset.mat、F 的 fold_manifest.csv；確認 sampleID 對齊、X 為 200×1024、y/groupID 各 200 筆。
-3. 取 outerFold=k 的列為 validation，其餘為 train。跑 fitPCA(Xtrain)，保存該折 mean mu 和 directions W。
+3. 取 outerFold=k 的列為 validation，其餘為 train。跑 fitPCA(Xtrain, ytrain)，保存該折 mean mu 和 directions w。
 4. q 固定為 rank(Xtrain−mu)，使用 MATLAB rank 的 documented default tolerance；目前每折 Ntrain=160，q≤159。由 pca(...,'Algorithm','svd') 取得係數，只保留 1:q 欄。
-5. 對 train 和 validation 都執行 Z=(X−mu)*W。validation 不重算平均或方向；五折各自重新 fit。
+5. 對 train 和 validation 都執行 Z=(X−mu)*w。validation 不重算平均或方向；五折各自重新 fit。
 6. 每折記錄 q、explained variance、fitSeconds、transformSeconds 和 shape assertions。與 C 合併成 reduction_summary.csv，交給 D/E/F。
 7. 把 PCA 示意圖、q 定義、各折實測 q/變異解釋率、限制與 F 核准的結果放入簡報和書面報告。
 
@@ -59,7 +59,7 @@ matlab/fitPCA.m；matlab/transformPCA.m；synthetic PCA tests；private reductio
 
 ## 給 AI 的背景提示
 
-我負責 B。請依共同規格寫 fitPCA(Xtrain) 與 transformPCA(model,X)。先推導 mu/W/Z 的矩陣尺寸，再用 MATLAB pca Algorithm svd 和 rank 預設容差決定 q。附 synthetic low-rank 測試、train/validation 使用同一 model 的測試、有限值及列順序檢查；不要加 q 門檻或 tuning。
+我負責 B。請依共同規格寫 fitPCA(Xtrain, ytrain) 與 transformPCA(model,X)。先推導 mu/w/Z 的矩陣尺寸，再用 MATLAB pca Algorithm svd 和 rank 預設容差決定 q。附 synthetic low-rank 測試、train/validation 使用同一 model 的測試、有限值及列順序檢查；不要加 q 門檻或 tuning。
 
 提供給 AI 的內容只含函式介面、synthetic arrays、非識別尺寸、MATLAB release/toolbox 和已遮蔽錯誤訊息。不要上傳臉部影像、X 特徵、sample-level predictions、原始檔名、私人路徑或憑證。AI 產生的 code 要先由組員 review，再在指定 MATLAB 環境執行。
 
