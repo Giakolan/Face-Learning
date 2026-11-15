@@ -7,14 +7,27 @@ This repository is the team's MATLAB implementation workspace for the face-image
 - PCA → MLP
 - LDA → MLP
 
-The public FaceLab site explains the project and currently demonstrates one browser-local PCA + Gaussian Naive Bayes baseline. That demonstration is not a MATLAB result, and the other three pipelines must not be described as trained until their implementations and evaluations exist.
+The public FaceLab site is a teaching demo. The course results come from the MATLAB experiments in this repository.
+
+## Current implementation
+
+| Stage | MATLAB entry points | Output |
+|---|---|---|
+| A · Prepare data | [`inspectTrainingData`](matlab/inspectTrainingData.m), [`prepareData`](matlab/prepareData.m) | Checks the 200 training PNGs and creates a private `train_dataset.mat` with `X` (200 × 1,024), `y`, `sampleID`, `groupID`, and `preprocessSpec`. |
+| F · Create and read folds | [`runFStageOne`](matlab/runFStageOne.m), [`loadFoldData`](matlab/loadFoldData.m) | Creates `fold_manifest.csv`, `fold_counts.csv`, and `fold_config.json`. Loads 160 training rows and 40 validation rows for a selected fold. The two images in a filename group stay in the same fold. |
+| B · PCA | [`fitPCA`](matlab/fitPCA.m), [`transformPCA`](matlab/transformPCA.m) | Learns projection directions from the training rows. The retained dimension is the numerical rank of the centered training matrix. |
+| C · Fisher LDA | [`fitLDA`](matlab/fitLDA.m), [`transformLDA`](matlab/transformLDA.m) | Uses the training rows and labels to learn a projection to one feature. |
+
+Bayes (D), MLP (E), and the end-to-end evaluation of all four pipelines are pending. F's current entry point prepares the folds. The independent 100-image course test set is reserved for final evaluation after the methods and settings are fixed.
+
+See the [data contract](docs/DATA_CONTRACT.md), [project specifications](docs/PROJECT_SPECIFICATIONS.md), and [team working rules](docs/TEAM_WORKING_RULES.md) for the shared interface and evaluation protocol.
 
 ## Start here
 
 1. Read the `AGENTS.md` on your assigned branch for role-specific context and AI-collaboration guidance.
-2. Read the team's initial working rules on the website, then confirm or revise them together.
-3. Keep training images, official test images, private file paths, credentials, and identifying filename lists out of this repository.
-4. Implement and test with synthetic matrices first. Use only the training portion of each fold to fit preprocessing, dimensionality reduction, classifiers, and tuning choices.
+2. Read the [team working rules](docs/TEAM_WORKING_RULES.md) and [AI collaboration guide](docs/AI_COLLABORATION_GUIDE.md).
+3. Keep images, MAT packages, source filename maps, fold files, private paths, and credentials in approved private locations outside this repository.
+4. Test with synthetic matrices first. For each fold, fit PCA or LDA on the training rows and use the fitted model to transform both the training and validation rows. Use the same folds for all four pipelines.
 5. Commit only your assigned files on your own branch and open a pull request to `main` for review.
 
 ## Branches
@@ -30,11 +43,26 @@ The public FaceLab site explains the project and currently demonstrates one brow
 
 Each role branch has its own top-level `AGENTS.md`. Branch names are part of the shared workflow; coordinate before renaming them.
 
-## Current project status
+## Run the synthetic checks in MATLAB
 
-The website contains a Python-trained PCA + Gaussian Naive Bayes teaching baseline. The formal course implementation and fair comparison of all four combinations are still team work. MATLAB release, toolbox availability, label provenance, data grouping, Bayes assumptions, feature preprocessing, and tuning rules must be verified from course materials and the actual data before being fixed.
+Set MATLAB's **Current Folder** to the repository root. In a remote MATLAB session, keep the `matlab/`, `matlab/tests/`, and `tests/` directory structure when transferring the code.
 
-## MATLAB and Git quick start
+```matlab
+addpath(fullfile(pwd, 'matlab'))
+testPoolFaceImage
+assertSuccess(runtests('tests/testPCA.m'))
+assertSuccess(runtests('tests/testFoldManifest.m'))
+run('matlab/tests/test_LDA_math.m')
+run('matlab/tests/test_LDA_synthetic.m')
+```
+
+## Prepare the shared training folds
+
+1. **A** opens `matlab/prepareData.m` in MATLAB and clicks **Run**. Select the folder containing the 200 PNGs, then select a private output folder. Share `train_dataset.mat` with the team through the approved private location. Keep `data_manifest.csv`, which contains the source filenames, in A's private storage.
+2. **F** runs `runFStageOne(matPath)` with the path to that private MAT file. It runs the synthetic fold tests and saves the three fold files alongside the MAT file. Use the same `fold_manifest.csv` for every pipeline.
+3. **B–E** use `[trainData, validationData] = loadFoldData(matPath, manifestPath, fold)` for each fold from 1 to 5. Fit PCA with `trainData.X` or LDA with `trainData.X` and `trainData.y`. Apply the returned model to `trainData.X` and `validationData.X` separately using the matching `transform` function.
+
+## Git quick start
 
 ```powershell
 git clone https://github.com/heetah/Face-Learning.git
