@@ -33,15 +33,65 @@ const scopes = {
     ],
   },
 };
+const roleBranches = new Set(['feature/a-data-loader', ...Object.values(scopes).map((scope) => scope.base)]);
+const integrationRoots = ['docs/', 'matlab/', 'tests/'];
 
 function getRule(login) {
   const key = login?.toLowerCase();
   return Object.hasOwn(scopes, key) ? scopes[key] : undefined;
 }
 
+function integrationDirection(pr) {
+  if (pr.baseRefName === 'main') return 'role-to-main';
+  if (roleBranches.has(pr.baseRefName)) return 'main-to-role';
+  throw new Error('Integration PRs must target main or a configured role branch.');
+}
+
+function usesIntegrationBranch(pr) {
+  return pr.headRefName?.startsWith('integration/');
+}
+
+function changedPaths(git, base, head) {
+  // Treat renames as delete/add, so both the old and the new path are checked.
+  return git('diff', '--no-renames', '--name-only', '-z', `${base}...${head}`, '--')
+    .split('\0')
+    .filter(Boolean);
+}
+
+function auditIntegrationPaths(paths) {
+  const outside = paths.filter((path) => !integrationRoots.some((root) => path.startsWith(root)));
+  if (outside.length) {
+    throw new Error(`Paths outside the integration folders (docs/, matlab/, tests/): ${JSON.stringify(outside)}`);
+  }
+}
+
+function resolveHead(pr, git) {
+  if (!/^[a-f0-9]{40}$/.test(pr.headRefOid)) throw new Error('Invalid PR head SHA.');
+  const head = git('rev-parse', '--verify', `refs/face-audit/pr/${pr.number}`).trim();
+  if (head !== pr.headRefOid) throw new Error('The PR head changed during the audit. Rerun it.');
+  return head;
+}
+
+function auditIntegration(pr, git) {
+  if (pr.isCrossRepository !== false) throw new Error('Integration PRs require a branch in the team repository.');
+  const direction = integrationDirection(pr);
+  if (pr.isDraft) throw new Error('Draft integration PRs are not ready for integration.');
+  const head = resolveHead(pr, git);
+  const base = git('rev-parse', '--verify', `refs/remotes/origin/${pr.baseRefName}`).trim();
+  if (git('merge-base', base, head).trim() !== base) {
+    throw new Error('Rebuild the integration branch from the current target branch.');
+  }
+  const paths = changedPaths(git, base, head);
+  if (paths.length === 0) throw new Error('The PR has no file changes to integrate.');
+  auditIntegrationPaths(paths);
+  return { direction, base, head, paths };
+}
+
 export function audit(pr, git) {
   if (pr.state !== 'OPEN') throw new Error('The pull request is not open.');
-  if (pr.author?.login?.toLowerCase() === 'heetah') return { skipped: true };
+  if (pr.author?.login?.toLowerCase() === 'heetah') {
+    return usesIntegrationBranch(pr) ? auditIntegration(pr, git) : { skipped: true };
+  }
   const rule = getRule(pr.author?.login);
   if (!rule) {
     throw new Error('No role is configured for this PR author.');
@@ -50,12 +100,9 @@ export function audit(pr, git) {
     throw new Error(`The PR must target ${rule.base}.`);
   }
   if (pr.isDraft) throw new Error('Draft PRs are not ready for integration.');
-  if (!/^[a-f0-9]{40}$/.test(pr.headRefOid)) throw new Error('Invalid PR head SHA.');
-
+  const head = resolveHead(pr, git);
   const main = git('rev-parse', '--verify', 'refs/remotes/origin/main').trim();
   const role = git('rev-parse', '--verify', `refs/remotes/origin/${rule.base}`).trim();
-  const head = git('rev-parse', '--verify', `refs/face-audit/pr/${pr.number}`).trim();
-  if (head !== pr.headRefOid) throw new Error('The PR head changed during the audit. Rerun it.');
   if (git('merge-base', main, head).trim() !== main) {
     throw new Error('Update the PR branch to include the current upstream main.');
   }
@@ -63,11 +110,9 @@ export function audit(pr, git) {
     throw new Error('The target role branch must be synchronized with upstream main.');
   }
 
-  // Treat renames as delete/add, so both the old and the new path are checked.
-  const paths = git('diff', '--no-renames', '--name-only', '-z', `${role}...${head}`, '--')
-    .split('\0')
-    .filter(Boolean);
+  const paths = changedPaths(git, role, head);
   if (paths.length === 0) throw new Error('The PR has no role changes to audit.');
+  auditIntegrationPaths(paths);
   const unexpected = paths.filter((path) => !rule.files.includes(path));
   if (unexpected.length) {
     throw new Error(`Paths outside the role allowlist: ${JSON.stringify(unexpected)}`);
@@ -83,15 +128,18 @@ function run(pullNumber) {
   const repo = process.env.GITHUB_REPOSITORY || 'heetah/Face-Learning';
   const pr = JSON.parse(execFileSync('gh', [
     'pr', 'view', pullNumber, '--repo', repo,
-    '--json', 'number,author,baseRefName,headRefOid,isDraft,state',
+    '--json', 'number,author,baseRefName,headRefName,headRefOid,isCrossRepository,isDraft,state',
   ], { encoding: 'utf8' }));
   if (String(pr.number) !== pullNumber) throw new Error('Unexpected PR number returned by GitHub.');
   const rule = getRule(pr.author?.login);
-  if (rule && pr.baseRefName === rule.base && !pr.isDraft && pr.state === 'OPEN') {
+  const maintainerIntegration = pr.author?.login?.toLowerCase() === 'heetah'
+    && usesIntegrationBranch(pr) && pr.isCrossRepository === false
+    && (pr.baseRefName === 'main' || roleBranches.has(pr.baseRefName));
+  if (((rule && rule.base === pr.baseRefName) || maintainerIntegration) && !pr.isDraft && pr.state === 'OPEN') {
     // Fetch Git objects only. No PR checkout, hooks, build, or script execution.
-    git('fetch', '--no-tags', 'origin',
-      '+refs/heads/main:refs/remotes/origin/main',
-      `+refs/heads/${rule.base}:refs/remotes/origin/${rule.base}`,
+    const branches = new Set(['main', pr.baseRefName]);
+    const refspecs = [...branches].map((branch) => `+refs/heads/${branch}:refs/remotes/origin/${branch}`);
+    git('fetch', '--no-tags', 'origin', ...refspecs,
       `+refs/pull/${pullNumber}/head:refs/face-audit/pr/${pullNumber}`);
   }
   console.log(JSON.stringify(audit(pr, git), null, 2));
