@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/scripts/audit-role-pr*.mjs'
       - '.github/workflows/audit-role-pr.yml'
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, converted_to_draft]
   workflow_dispatch:
     inputs:
       pull_number:
@@ -30,8 +32,11 @@ jobs:
         run: node --test .github/scripts/audit-role-pr.test.mjs
 
   audit:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request_target' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
+    concurrency:
+      group: role-audit-${{ github.event.pull_request.number || inputs.pull_number }}
+      cancel-in-progress: true
     steps:
       - name: Load the audit from the trusted main commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -41,5 +46,5 @@ jobs:
       - name: Verify PR authorship, branch, main ancestry and paths
         env:
           GH_TOKEN: ${{ github.token }}
-          AUDIT_PULL_NUMBER: ${{ inputs.pull_number }}
+          AUDIT_PULL_NUMBER: ${{ github.event.pull_request.number || inputs.pull_number }}
         run: node .github/scripts/audit-role-pr.mjs "$AUDIT_PULL_NUMBER"

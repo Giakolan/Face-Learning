@@ -2,7 +2,9 @@
 
 ## 試跑唯讀檢查
 
-將這輪程式碼審查合入 `main` 後，從 GitHub Actions 開啟 **Audit role pull request → Run workflow**，選 `main` 並填入 PR 編號。檢查只讀取作者、Git refs 與檔名差異。執行紀錄會列出被檢查的 `main`、目標分支、PR head SHA 和檔案。
+組員開啟、更新、改目標、重開 PR 或切換草稿狀態時，**Audit role pull request** 會自動試跑。也可從 **Run workflow** 選 `main`、填入 PR 編號重跑，尤其是 `main` 或角色分支剛更新時。檢查只讀取作者、Git refs 與檔名差異。通過時會列出被檢查的 `main`、目標分支、PR head SHA 和檔案。
+
+自動觸發使用唯讀的 `pull_request_target` 工作。它從團隊預設分支執行檢查程式，只把組員提交當成 Git 資料讀取。公開 repo 的 GitHub Actions 事件政策可能會封鎖此事件。維護者可在 [GitHub 事件政策說明](https://docs.github.com/en/actions/reference/security/securely-using-pull_request_target#default-policy-for-pull_request_target) 查看是否需要明確允許。手動試跑仍可使用。
 
 目前試跑名單依歷史 PR 設定，B 為 `liupiyan`、C 為 `bugtail`、D 為 `Giakolan`、E 為 `uhumipaa`、F 為 `cloud-sky-0128`。D、E 的路徑來自 [PR #12](https://github.com/heetah/Face-Learning/pull/12) 和 [PR #13](https://github.com/heetah/Face-Learning/pull/13)。正式啟用前須由維護者確認帳號、分支和可修改的檔案。未設定的帳號會被拒絕，`heetah` 跳過組員規則。新增檔案或跨角色變更先由維護者確認範圍。
 
@@ -18,4 +20,4 @@
 - bot 開 PR 到 `main`。先重跑路徑檢查並執行適用的合成測試，再透過 GitHub Auto-merge 或 merge queue 合併。整合工作依序處理，合併衝突、測試失敗或 `main` 移動時重新驗證。
 - 正式自動合併需要在 repo 設定保護規則、必要的檢查，以及 GitHub App 的最小寫入權限。具備寫入權限的流程只操作可信的 refs 和 GitHub metadata。合成測試在隔離 runner 執行，使用唯讀權限與合成資料。
 
-本輪只提供唯讀試跑。自動觸發、實際合併和規則設定須在確認帳號、路徑與測試環境後配置。
+本輪提供手動和自動的唯讀試跑。實際合併和必過規則須在確認帳號、路徑與測試環境後配置。
