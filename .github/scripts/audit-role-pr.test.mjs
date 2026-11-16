@@ -20,12 +20,14 @@ function gitFixture({
       if (args[1] === 'refs/face-audit/pr/9') return head;
     }
     if (command === 'merge-base') {
+      if (args[0] === role && args[1] === head) return staleHead ? main : role;
       assert.equal(args[0], main);
       if (args[1] === head) return staleHead ? role : main;
       if (args[1] === role) return staleRole ? head : main;
     }
     if (command === 'diff') {
-      assert.deepEqual(args, ['--no-renames', '--name-only', '-z', `${role}...${head}`, '--']);
+      const target = base === 'main' ? main : role;
+      assert.deepEqual(args, ['--no-renames', '--name-only', '-z', `${target}...${head}`, '--']);
       return paths.join('\0');
     }
     assert.fail(`Unexpected git call: ${command} ${args}`);
@@ -70,4 +72,27 @@ test('accepts the actual Bayes and MLP author/branch/path mappings', () => {
     assert.deepEqual(audit(candidate, gitFixture({ base: candidate.baseRefName, paths })).paths, paths);
   }
   assert.throws(() => audit({ ...bayes, baseRefName: mlp.baseRefName }), /must target feature\/d-bayes/);
+});
+
+const integration = {
+  ...pr, author: { login: 'heetah' }, headRefName: 'integration/pca', isCrossRepository: false,
+};
+
+for (const [base, direction] of [['main', 'role-to-main'], ['feature/b-pca', 'main-to-role']]) {
+  test(`${direction} admits only the three integration folders`, () => {
+    const candidate = { ...integration, baseRefName: base };
+    const paths = ['docs/roles/b.md', 'matlab/private/pool.m', 'tests/testPCA.m'];
+    assert.equal(audit(candidate, gitFixture({ paths, base })).direction, direction);
+    for (const path of ['README.md', 'AGENTS.md', '.github/workflows/check.yml', 'assets/map.svg', 'docs-old/old.md', 'docs']) {
+      assert.throws(() => audit(candidate, gitFixture({ paths: [...paths, path], base })),
+        /outside the integration folders/);
+    }
+    assert.throws(() => audit(candidate, gitFixture({ base, staleHead: true })),
+      /current target branch/);
+  });
+}
+
+test('integration requires a team branch and a configured destination', () => {
+  assert.throws(() => audit({ ...integration, isCrossRepository: true }, gitFixture()), /team repository/);
+  assert.throws(() => audit({ ...integration, baseRefName: 'other' }, gitFixture()), /configured role/);
 });
